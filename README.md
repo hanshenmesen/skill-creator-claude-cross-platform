@@ -1,86 +1,101 @@
-# skill-creator-claude
+# skill-creator-claude (cross-platform)
 
-[中文版](./README_CN.md)
+[中文版说明](./README_CN.md)
 
-> Anthropic's best-in-class skill creation methodology — now available on any agent platform.
+> Anthropic’s skill-creation methodology — runnable on **Claude Code**, **OpenClaw**, and other agent platforms, with minimal upstream drift.
 
-Anthropic built an exceptional skill-creator into Claude Code: a full development loop covering drafting, eval, iteration, benchmarking, and description optimization. This repo is a minimal, faithful adaptation that removes Claude Code-specific dependencies so anyone can use it — no matter which agent platform they're on.
-
----
-
-## Origin & Attribution
-
-- **Original author**: Anthropic
-- **License**: Apache 2.0 (see [LICENSE](./LICENSE))
-- **Original source**: Claude Code built-in plugin (`~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator`)
-- **Full experience**: [Claude Code](https://claude.ai/code) — free to use, and where 100% of the features work
-
-This repository is a derivative work under Apache 2.0. All intellectual credit belongs to Anthropic.
+This repository is a faithful derivative of the Claude Code **skill-creator** plugin: the same loop (draft → eval → benchmark → iterate → description tuning → package). Claude Code–only pieces (`claude -p`, `present_files`, etc.) are either removed or documented with fallbacks. For **OpenClaw**, dedicated scripts replace the `claude -p` workflow so trigger testing and description improvement can run end-to-end via `sessions_spawn`.
 
 ---
 
-## Our Philosophy
+## Origin & attribution
 
-- **Minimal changes**: Only remove hard dependencies that prevent cross-platform use. The methodology, scripts, and tooling are untouched.
-- **Full attribution**: All copyright notices and LICENSE files preserved as required by Apache 2.0, and as a matter of principle.
-- **Accessible to everyone**: The original skill-creator is outstanding — it shouldn't be exclusive to Claude Code users.
-- **Gateway, not replacement**: If you want 100% of the capability, use Claude Code. This version is the on-ramp.
+- **Original author**: Anthropic  
+- **License**: Apache 2.0 (same license family as the upstream skill-creator; retain notices when redistributing).  
+- **Upstream path (Claude Code plugin)**:  
+  `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator`  
+- **Full upstream experience**: [Claude Code](https://claude.ai/code) — where every feature is available out of the box.
 
----
-
-## What Was Changed
-
-Only **4 modifications** to `SKILL.md` (~10% of the file). Everything else is identical to the original.
-
-| # | Change | Reason |
-|---|---|---|
-| 1 | Added modification notice comment at top of SKILL.md | Apache 2.0 requires noting changes in modified files |
-| 2 | Description Optimization Step 3: added platform note that `run_loop.py` requires the `claude -p` CLI, with a manual fallback for other platforms | `claude -p` is a Claude Code-exclusive CLI tool |
-| 3 | "Package and Present": removed the `present_files` tool condition, simplified to always run `package_skill.py` | `present_files` is a Claude Code-exclusive tool |
-| 4 | Merged "Claude.ai-specific" and "Cowork-Specific" sections into a single "Platform Notes" section; removed TodoList reminder | Unified cross-platform guidance; removed Claude Code UI references |
-
-**Unchanged** (i.e., everything that matters):
-- Complete skill development methodology
-- All Python scripts (`run_eval.py`, `run_loop.py`, `improve_description.py`, etc.)
-- Eval viewer and benchmark system
-- Grading and blind comparison workflows
-- All agent files (`agents/grader.md`, `agents/comparator.md`, `agents/analyzer.md`)
-- `references/schemas.md`
+Design and methodology credit belong to Anthropic; this repo is a derivative work.
 
 ---
 
-## Feature Comparison
+## Philosophy
 
-| Feature | This version | Claude Code (original) |
-|---|---|---|
-| Skill drafting & iteration | ✅ | ✅ |
-| Eval runner & viewer | ✅ (requires Python) | ✅ |
-| Benchmark comparison | ✅ (requires subagents) | ✅ |
-| Description improvement loop | ✅ (requires `ANTHROPIC_API_KEY`) | ✅ |
-| Description trigger-rate testing | ❌ requires `claude -p` CLI | ✅ |
-| Skill packaging (`.skill` file) | ✅ | ✅ |
+- **Minimal surface change**: Keep methodology, scripts layout, and agent prompts aligned with upstream unless a hard dependency blocks portability.  
+- **Clear attribution**: Preserve upstream intent and license obligations.  
+- **OpenClaw as a first-class path**: Not “generic only” — the repo ships `openclaw_run_eval.py` and `openclaw_improve_description.py` plus `SKILL.md` **Platform Notes** so OpenClaw users are not stuck without `claude -p`.  
+- **Gateway, not a full product**: For the complete Claude Code–integrated experience, use Claude Code; this tree is for running the same ideas elsewhere.
+
+---
+
+## What differs from upstream
+
+### `SKILL.md` (conceptual edits)
+
+Roughly the same four themes described in earlier releases: modification notice at the top, packaging without `present_files`, unified **Platform Notes**, and guidance when `run_loop.py` / `claude -p` are unavailable. The file now also documents **OpenClaw** (`sessions_spawn`, `--static` eval viewer, skill install paths, and the OpenClaw replacement scripts).
+
+### New / platform-specific scripts
+
+| Script | Role |
+|--------|------|
+| `scripts/openclaw_run_eval.py` | Trigger-style evaluation without `claude -p` — prepare tasks, run via subagents, aggregate verdicts. |
+| `scripts/openclaw_improve_description.py` | Description-improvement flow driven by subagents instead of the Anthropic SDK-only path where applicable. |
+
+Original scripts (`run_eval.py`, `run_loop.py`, `improve_description.py`, etc.) remain for Claude Code or environments where you still use those stacks.
+
+---
+
+## Feature matrix (honest)
+
+| Capability | Claude Code (upstream) | OpenClaw (this repo) |
+|------------|-------------------------|------------------------|
+| Skill drafting & iteration | Yes | Yes |
+| Eval runner, benchmark aggregation, eval viewer | Yes | Yes — use `--static` for headless HTML |
+| Blind compare / grader subagents | Yes | Yes — via `sessions_spawn` |
+| **Automated** trigger-rate testing (`run_eval` stack) | Yes (`claude -p`) | Yes — `openclaw_run_eval.py` + subagents |
+| **Automated** description loop (`run_loop` stack) | Yes | Yes — `openclaw_*` scripts + subagents |
+| Package `.skill` | Yes | Yes |
+
+---
+
+## Repository layout
+
+```
+skill-creator-claude-cross-platform/
+├── SKILL.md                 # Main skill instructions (read this when using the skill)
+├── README.md / README_CN.md
+├── scripts/                 # Python tooling (eval, package, OpenClaw helpers, …)
+├── eval-viewer/             # generate_review.py + viewer template
+├── agents/                  # grader, comparator, analyzer prompts
+├── assets/                  # HTML templates
+└── references/              # e.g. schemas.md
+```
 
 ---
 
 ## Installation
 
-### Via ClawHub
 ```bash
-clawhub install plabzzxx/skill-creator-claude
+git clone https://github.com/hanshenmesen/skill-creator-claude-cross-platform.git
 ```
 
-### Manual
-Clone or copy this entire repository into your agent platform's skills directory.
+Copy or symlink the folder into your platform’s skills directory (for OpenClaw, see path hints in `SKILL.md` → Platform Notes).
 
-### Optional: description improvement script
-`improve_description.py` uses the Anthropic API directly and works on any platform:
-```bash
-export ANTHROPIC_API_KEY=your_key_here
-```
+---
+
+## OpenClaw quick reference
+
+Full commands, path conventions, and subagent patterns live in **`SKILL.md` → “Platform Notes” → “OpenClaw Platform Specifics”**. In short:
+
+- Use `sessions_spawn` with `runtime="subagent"` and `mode="run"` for evals and OpenClaw helper scripts.  
+- Prefer `python …/eval-viewer/generate_review.py … --static <out.html>` in headless setups.  
+- Run trigger / description flows via `python -m scripts.openclaw_run_eval …` and `python -m scripts.openclaw_improve_description …` as documented there.
+
+Python dependency commonly needed: `pyyaml` (see `SKILL.md`).
 
 ---
 
 ## Credits
 
-All design, code, and methodology copyright Anthropic, licensed under Apache 2.0.  
-If this skill is useful to you, go try [Claude Code](https://claude.ai/code) — that's where the full picture lives.
+All core methodology and original structure are Anthropic’s work, under Apache 2.0. If this skill helps you, try [Claude Code](https://claude.ai/code) for the reference implementation.

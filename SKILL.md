@@ -1,15 +1,16 @@
 ---
 name: skill-creator-claude
-version: 1.0.0
+version: 1.0.1
 description: Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, update or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.
 ---
 
 <!--
   Originally created by Anthropic for Claude Code (Apache 2.0).
-  This file has been modified to remove Claude Code-specific dependencies
-  so the skill works on any agent platform that supports subagents.
-  All core methodology is preserved unchanged.
-  See README.md for the full change log and attribution.
+  Modified derivative: removes Claude Code-only tools where needed, documents
+  fallbacks for other platforms, and adds OpenClaw-specific paths (sessions_spawn,
+  openclaw_run_eval.py, openclaw_improve_description.py). Core methodology unchanged.
+  See README.md / README_CN.md for attribution and install (GitHub:
+  hanshenmesen/skill-creator-claude-cross-platform).
 -->
 
 # Skill Creator
@@ -254,7 +255,7 @@ Put each with_skill version before its baseline counterpart.
      --benchmark <workspace>/iteration-N/benchmark.json \
      --static <workspace>/iteration-N/review.html
    ```
-   Then share the HTML file with the user (upload via CDN skill if available, or provide the local path).
+   Then share the HTML file with the user (upload via a CDN helper if available, or provide the local path).
    Feedback will be downloaded as a `feedback.json` file when the user clicks "Submit All Reviews". After download, copy `feedback.json` into the workspace directory for the next iteration to pick up.
 
    **On environments with a browser** (e.g. local desktop):
@@ -399,15 +400,17 @@ This step matters — bad eval queries lead to bad descriptions.
 
 ### Step 3: Run the optimization loop
 
-Tell the user: "This will take some time — I'll run the optimization loop in the background and check on it periodically."
+Tell the user: "This will take some time — I'll run the optimization loop and check on progress."
 
-> **Platform note:** This step requires two things:
-> 1. The `claude` CLI (`claude -p`) — available in **Claude Code** only, used to test whether a description triggers the skill.
-> 2. `ANTHROPIC_API_KEY` — used by `improve_description.py` to propose better descriptions.
->
-> **If you are NOT in Claude Code (including OpenClaw):** skip `run_loop.py` entirely. Instead, propose description improvements yourself based on the eval queries the user reviewed. Analyze which queries should/shouldn't trigger, identify patterns in the current description that cause mis-triggers, and craft an improved description. Then ask the user to test them manually. You can still use `improve_description.py` standalone if `ANTHROPIC_API_KEY` is available.
+Pick the path that matches the environment:
 
-Save the eval set to the workspace, then run in the background (**Claude Code only**):
+---
+
+**A — Claude Code** (has `claude -p` — upstream path)
+
+Requires: `claude` CLI (`claude -p`) and `ANTHROPIC_API_KEY` for `improve_description.py` inside the loop.
+
+Save the eval set to the workspace, then run in the background:
 
 ```bash
 python -m scripts.run_loop \
@@ -423,6 +426,20 @@ Use the model ID from your system prompt (the one powering the current session) 
 While it runs, periodically tail the output to give the user updates on which iteration it's on and what the scores look like.
 
 This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude with extended thinking to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times. When it's done, it opens an HTML report in the browser showing the results per iteration and returns JSON with `best_description` — selected by test score rather than train score to avoid overfitting.
+
+---
+
+**B — OpenClaw** (no `claude -p`)
+
+Do **not** use `run_loop.py` or `run_eval.py` for automation — they depend on `claude -p`. Use **`openclaw_run_eval.py`** (prepare → spawn subagents per task → aggregate) and **`openclaw_improve_description.py`** (generate → spawn subagent → parse) exactly as in **Platform Notes → OpenClaw Platform Specifics → Description optimization**. Those scripts match the original output shapes so `generate_report.py` and related tooling still work.
+
+Orchestrate subagent steps with `sessions_spawn` (`runtime="subagent"`, `mode="run"`). This is a manual coordination loop compared to `run_loop.py`, but it is the supported automated path on OpenClaw.
+
+---
+
+**C — Other environments** (no `claude -p`, not OpenClaw)
+
+Skip `run_loop.py`. Propose description improvements from the eval set the user reviewed: which queries should/shouldn't trigger, patterns in the current description that cause mis-triggers, and a revised description. Ask the user to validate manually. You may use `improve_description.py` with `ANTHROPIC_API_KEY` if available, without the full `run_eval`/`run_loop` stack.
 
 ### How skill triggering works
 
@@ -458,7 +475,7 @@ The core workflow (draft → test → review → improve → repeat) is the same
 
 **IMPORTANT — generate the eval viewer before evaluating inputs yourself**: Whether you're in Claude Code, Cowork, or any other platform with a filesystem, always run `generate_review.py` after tests complete. Get the results in front of the human ASAP before making your own corrections. Do not write custom HTML — use the provided script.
 
-**Description optimization** (`run_eval.py` / `run_loop.py`): These scripts require the `claude` CLI (`claude -p`), which is only available in **Claude Code**. The improvement component (`improve_description.py`) works on any platform with `ANTHROPIC_API_KEY`. If `claude -p` is unavailable, skip the automated loop and propose description improvements yourself based on the eval query review.
+**Description optimization**: In **Claude Code**, `run_eval.py` / `run_loop.py` use the `claude` CLI (`claude -p`). On **OpenClaw**, use `openclaw_run_eval.py` and `openclaw_improve_description.py` instead (see OpenClaw section below). Elsewhere without `claude -p`, use manual iteration and/or `improve_description.py` with `ANTHROPIC_API_KEY` when applicable.
 
 **Blind comparison**: Requires subagents. Skip on platforms without them.
 
@@ -495,7 +512,7 @@ python <skill-creator-path>/eval-viewer/generate_review.py \
   --static <workspace>/iteration-N/review.html
 ```
 
-Then share the generated HTML file with the user (e.g. upload via the `aibibp-cdn-upload` skill if available, or provide the file path directly).
+Then share the generated HTML file with the user (e.g. upload via a CDN helper skill if your environment has one, or provide the file path directly).
 
 **Description optimization**: The original `run_eval.py` and `run_loop.py` require `claude -p` which is not available in OpenClaw. Use the OpenClaw-adapted replacements instead:
 
@@ -548,7 +565,7 @@ pip install --break-system-packages pyyaml
 
 **Grader/Comparator/Analyzer agents**: When the skill says to "spawn a grader subagent", use `sessions_spawn` with `runtime="subagent"` and include the relevant agent instructions (from `agents/grader.md`, `agents/comparator.md`, or `agents/analyzer.md`) in the task prompt. Read the agent .md file first, then embed the key instructions into the subagent task.
 
-**File paths**: When referencing files within this skill, resolve paths relative to this skill's directory: `~/.openclaw/workspace/skills/skill-creator-claude-master/`
+**File paths**: When referencing files within this skill on OpenClaw, resolve paths relative to this skill's directory (example clone name): `~/.openclaw/workspace/skills/skill-creator-claude-cross-platform/`
 
 **Skill installation target**: Skills created or packaged by this tool should be installed to `~/.openclaw/workspace/skills/` (NOT `~/.openclaw/skills/`).
 
